@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Fixes
+
+- Code fence detection now follows CommonMark pairing rules. Fences
+  opened with 4 or more backticks (or tildes) are correctly recognized
+  and paired, so chunks no longer split inside nested code blocks that
+  wrap shorter fences. Tilde fences are now supported.
+
 ## [2.1.0] - 2026-04-05
 
 Code files now chunk at function and class boundaries via tree-sitter,
