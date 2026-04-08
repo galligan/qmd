@@ -101,7 +101,7 @@ export const BREAK_PATTERNS: [RegExp, number, string][] = [
   [/\n#{4}(?!#)/g, 70, 'h4'],      // #### but not #####
   [/\n#{5}(?!#)/g, 60, 'h5'],      // ##### but not ######
   [/\n#{6}(?!#)/g, 50, 'h6'],      // ######
-  [/\n```/g, 80, 'codeblock'],     // code block boundary (same as h3)
+  [/\n(?:`{3,}|~{3,})/g, 80, 'codeblock'],  // code block boundary (same as h3)
   [/\n(?:---|\*\*\*|___)\s*\n/g, 60, 'hr'],  // horizontal rule
   [/\n\n+/g, 20, 'blank'],         // paragraph boundary
   [/\n[-*]\s/g, 5, 'list'],        // unordered list item
@@ -139,27 +139,42 @@ export function scanBreakPoints(text: string): BreakPoint[] {
 
 /**
  * Find all code fence regions in the text.
- * Code fences are delimited by ``` and we should never split inside them.
+ * Code fences are delimited by runs of ``` or ~~~ (3 or more), and we should
+ * never split inside them. Follows CommonMark pairing rules: the closing fence
+ * must use the same character as the opening fence, be at least as long, and
+ * carry no info string.
+ *
+ * Only column-0 fences are recognized. Indented fences are not detected.
  */
 export function findCodeFences(text: string): CodeFenceRegion[] {
   const regions: CodeFenceRegion[] = [];
-  const fencePattern = /\n```/g;
-  let inFence = false;
-  let fenceStart = 0;
+  // Capture: fence char run, then the rest of the line (info string or close tail).
+  const fencePattern = /\n(`{3,}|~{3,})([^\n]*)/g;
+  let open: { char: string; len: number; start: number } | null = null;
 
   for (const match of text.matchAll(fencePattern)) {
-    if (!inFence) {
-      fenceStart = match.index!;
-      inFence = true;
-    } else {
-      regions.push({ start: fenceStart, end: match.index! + match[0].length });
-      inFence = false;
+    const run = match[1]!;
+    const tail = match[2]!;
+    const char = run[0]!;
+    const len = run.length;
+    const pos = match.index!;
+
+    if (!open) {
+      open = { char, len, start: pos };
+      continue;
     }
+
+    // To close: same char, length >= opening, and no info string on the close line.
+    if (char === open.char && len >= open.len && tail.trim() === '') {
+      regions.push({ start: open.start, end: pos + match[0].length });
+      open = null;
+    }
+    // Otherwise it's content inside the open fence; ignore.
   }
 
   // Handle unclosed fence - extends to end of document
-  if (inFence) {
-    regions.push({ start: fenceStart, end: text.length });
+  if (open) {
+    regions.push({ start: open.start, end: text.length });
   }
 
   return regions;

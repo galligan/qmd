@@ -677,6 +677,123 @@ describe("findCodeFences", () => {
     const fences = findCodeFences(text);
     expect(fences.length).toBe(0);
   });
+
+  test("handles 4-backtick fence containing 3-backtick block", () => {
+    // Outer ```` fence wraps an inner ``` that must not close it.
+    const text = "Before\n````md\n```js\ninner\n```\n````\nAfter";
+    const fences = findCodeFences(text);
+    expect(fences.length).toBe(1);
+    // Inner ``` positions must be inside the single fence region
+    const innerOpen = text.indexOf("```js");
+    const innerClose = text.indexOf("```\n````");
+    expect(isInsideCodeFence(innerOpen, fences)).toBe(true);
+    expect(isInsideCodeFence(innerClose, fences)).toBe(true);
+  });
+
+  test("recognizes tilde fences", () => {
+    const text = "Before\n~~~\ncode\n~~~\nAfter";
+    const fences = findCodeFences(text);
+    expect(fences.length).toBe(1);
+  });
+
+  test("does not close tilde fence with backticks", () => {
+    // Open ~~~, stray ``` should not close it; unclosed extends to end.
+    const text = "Before\n~~~\ncode\n```\nstill inside";
+    const fences = findCodeFences(text);
+    expect(fences.length).toBe(1);
+    expect(fences[0]!.end).toBe(text.length);
+  });
+
+  test("does not close with shorter fence run", () => {
+    // Open ````, a ``` inside must not close it.
+    const text = "Before\n````\ncode\n```\nstill inside\n````\nAfter";
+    const fences = findCodeFences(text);
+    expect(fences.length).toBe(1);
+    const strayClose = text.indexOf("```\nstill");
+    expect(isInsideCodeFence(strayClose, fences)).toBe(true);
+  });
+
+  test("does not close when closing line has info string", () => {
+    // Close candidate has trailing text, so it's not a valid close.
+    const text = "Before\n```\ncode\n``` trailing\n```\nAfter";
+    const fences = findCodeFences(text);
+    expect(fences.length).toBe(1);
+    // The stray "``` trailing" should still be inside the fence
+    const stray = text.indexOf("``` trailing");
+    expect(isInsideCodeFence(stray, fences)).toBe(true);
+    // Real close is the bare ``` line near the end
+    expect(fences[0]!.end).toBe(text.indexOf("\nAfter"));
+  });
+
+  test("handles 5/4/3 backtick nesting with bare inner fences", () => {
+    // Outer 5-bt wraps 4-bt wraps 3-bt, all inner fences with no info string.
+    // Only the final 5-bt run may close the outer fence.
+    const text = [
+      "Before",
+      "`````md",
+      "````",
+      "```",
+      "code",
+      "```",
+      "````",
+      "`````",
+      "After",
+    ].join("\n");
+    const fences = findCodeFences(text);
+    expect(fences.length).toBe(1);
+    // Every inner fence run must be inside the single region.
+    for (const needle of ["````\n```", "```\ncode", "```\n````", "````\n`````"]) {
+      expect(isInsideCodeFence(text.indexOf(needle), fences)).toBe(true);
+    }
+  });
+
+  test("longer closing fence is valid (6-bt closes 5-bt)", () => {
+    const text = "Before\n`````\ncode\n``````\nAfter";
+    const fences = findCodeFences(text);
+    expect(fences.length).toBe(1);
+    expect(isInsideCodeFence(text.indexOf("code"), fences)).toBe(true);
+  });
+
+  test("same-length fences do not nest (CommonMark)", () => {
+    // ```` inside ```` cannot nest: the second ```` closes the first.
+    // Result is two empty-ish fences with "content" sitting outside both.
+    const text = "Before\n````\n````\ncontent\n````\n````\nAfter";
+    const fences = findCodeFences(text);
+    expect(fences.length).toBe(2);
+    expect(isInsideCodeFence(text.indexOf("content"), fences)).toBe(false);
+  });
+
+  test("mixed fence chars do not interact", () => {
+    // Backtick outer, tilde inner — different chars, so the tildes stay inside.
+    const text = "Before\n````\n~~~~\ninner\n~~~~\n````\nAfter";
+    const fences = findCodeFences(text);
+    expect(fences.length).toBe(1);
+    expect(isInsideCodeFence(text.indexOf("inner"), fences)).toBe(true);
+  });
+
+  test("handles info strings on outer and inner fences", () => {
+    const text = "Before\n```` wrap\n```js\ncode\n```\n````\nAfter";
+    const fences = findCodeFences(text);
+    expect(fences.length).toBe(1);
+    expect(isInsideCodeFence(text.indexOf("```js"), fences)).toBe(true);
+  });
+
+  test("tilde fences support 5/4/3 nesting", () => {
+    const text = [
+      "Before",
+      "~~~~~",
+      "~~~~",
+      "~~~",
+      "code",
+      "~~~",
+      "~~~~",
+      "~~~~~",
+      "After",
+    ].join("\n");
+    const fences = findCodeFences(text);
+    expect(fences.length).toBe(1);
+    expect(isInsideCodeFence(text.indexOf("code"), fences)).toBe(true);
+  });
 });
 
 describe("isInsideCodeFence", () => {
