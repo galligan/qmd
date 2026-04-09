@@ -8,6 +8,7 @@
   opened with 4 or more backticks (or tildes) are correctly recognized
   and paired, so chunks no longer split inside nested code blocks that
   wrap shorter fences. Tilde fences are now supported.
+- GPU: respect explicit `QMD_LLAMA_GPU=metal|vulkan|cuda` backend overrides instead of always using auto GPU selection. #529
 
 ## [2.1.0] - 2026-04-05
 
